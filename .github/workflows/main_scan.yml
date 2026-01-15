@@ -12,13 +12,13 @@ jobs:
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
-          base: ${{ github.event.repository.default_branch }}
+          base: "" # Scan all history for the first run / independent scan
           head: HEAD
-          extra_args: --debug --only-verified
+          extra_args: --debug --only-verified --no-verification # Disable verification for faster test failure if needed, or keep verif.
       - name: Alert on Failure
         if: failure()
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
-          pip install requests
+          pip install requests python-dotenv
           python notifier.py --ci
