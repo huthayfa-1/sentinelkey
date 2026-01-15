@@ -25,7 +25,7 @@ jobs:
         id: trufflehog
         run: |
           cd target_code
-          trufflehog git file://./ --rules ../trufflehog.yaml --fail --json > ../results.json 2>&1 || echo "SECRETS_FOUND=true" >> $GITHUB_ENV  # pragma: allowlist secret
+          trufflehog git file://./ --config ../trufflehog.yaml --fail --json > ../results.json 2>&1 || echo "SECRETS_FOUND=true" >> $GITHUB_ENV # pragma: allowlist secret
           cat ../results.json
       
       - name: Alert on Secrets Found
