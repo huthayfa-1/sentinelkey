@@ -1,6 +1,0 @@
-rules:
-  - name: OpenRouter API Key
-    detectors:
-      - type: regex
-        config:
-          regex: "sk-or-v1-[a-zA-Z0-9]{64}"
