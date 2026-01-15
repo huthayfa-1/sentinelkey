@@ -18,7 +18,7 @@ jobs:
       - name: Alert on Failure
         if: failure()
         env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL || secrets.DISCORD_WEBHOOK }}
         run: |
           pip install requests python-dotenv
           python notifier.py --ci
