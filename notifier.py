@@ -53,6 +53,10 @@ if __name__ == "__main__":
                     try:
                         finding = json.loads(line)
                         
+                        # Check if this is a finding (has DetectorName) or just a log message
+                        if 'DetectorName' not in finding:
+                            continue
+
                         # Extract details
                         secret_type = finding.get('DetectorName', 'Unknown Secret')
                         raw_secret = finding.get('Raw', 'REDACTED')
