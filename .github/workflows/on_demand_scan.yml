@@ -17,18 +17,21 @@ jobs:
         run: |
           git clone ${{ inputs.target_repo_url }} target_code
 
+      - name: Install TruffleHog
+        run: |
+          curl -sSfL https://raw.githubusercontent.com/trufflesecurity/trufflehog/main/scripts/install.sh | sh -s -- -b /usr/local/bin
+
       - name: TruffleHog Scan
-        uses: trufflesecurity/trufflehog@main
-        with:
-          path: ./target_code
-          base: "" # Scan all history
-          head: HEAD
-          extra_args: --debug
+        id: trufflehog
+        run: |
+          cd target_code
+          trufflehog git file://./ --fail --json > ../results.json 2>&1 || echo "SECRETS_FOUND=true" >> $GITHUB_ENV  # pragma: allowlist secret
+          cat ../results.json
       
-      - name: Alert on Failure
-        if: failure()
+      - name: Alert on Secrets Found
+        if: env.SECRETS_FOUND == 'true'
         env:
-          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}  # pragma: allowlist secret
         run: |
           pip install requests python-dotenv
           python notifier.py --ci
