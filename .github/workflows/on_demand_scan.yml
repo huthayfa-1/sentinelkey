@@ -1,0 +1,37 @@
+name: On-Demand Scanner
+on:
+  workflow_dispatch:
+    inputs:
+      target_repo_url:
+        description: 'URL of the repository to scan (e.g., https://github.com/user/repo)'
+        required: true
+
+jobs:
+  scan-external:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout SentinelKey (For Tools)
+        uses: actions/checkout@v3
+
+      - name: Checkout Target Repository
+        uses: actions/checkout@v3
+        with:
+          repository: ${{ inputs.target_repo_url }}
+          path: target_code
+          fetch-depth: 0
+
+      - name: TruffleHog Scan
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./target_code
+          base: "" # Scan all history
+          head: HEAD
+          extra_args: --debug --only-verified --no-verification
+      
+      - name: Alert on Failure
+        if: failure()
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: |
+          pip install requests python-dotenv
+          python notifier.py --ci
