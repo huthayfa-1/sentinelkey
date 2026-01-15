@@ -1,0 +1,4 @@
+pre-commit
+detect-secrets
+requests
+python-dotenv
