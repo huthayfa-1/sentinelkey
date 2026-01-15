@@ -34,4 +34,4 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}  # pragma: allowlist secret
         run: |
           pip install requests python-dotenv
-          python notifier.py --ci --input ../results.json
+          python notifier.py --ci --input results.json
