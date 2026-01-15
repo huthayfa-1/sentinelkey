@@ -21,4 +21,8 @@ jobs:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: |
           pip install requests python-dotenv
-          python notifier.py --ci
+          trufflehog git file://./ --extra-args "--debug" --json > results.json 2>&1 || true
+          if [ -s results.json ]; then
+             pip install requests python-dotenv
+             python notifier.py --ci --input results.json
+          fi
