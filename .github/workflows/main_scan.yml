@@ -14,7 +14,7 @@ jobs:
           path: ./
           base: "" # Scan all history for the first run / independent scan
           head: HEAD
-          extra_args: --debug --only-verified --no-verification # Disable verification for faster test failure if needed, or keep verif.
+          extra_args: --debug
       - name: Alert on Failure
         if: failure()
         env:

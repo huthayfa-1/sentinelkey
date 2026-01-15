@@ -23,7 +23,7 @@ jobs:
           path: ./target_code
           base: "" # Scan all history
           head: HEAD
-          extra_args: --debug --only-verified --no-verification
+          extra_args: --debug
       
       - name: Alert on Failure
         if: failure()
