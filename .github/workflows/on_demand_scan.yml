@@ -41,53 +41,12 @@ jobs:
           pip install requests python-dotenv
           python notifier.py --ci --input results.json
 
-      - name: Update History
+      - name: Save to Supabase
         if: always()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_KEY: ${{ secrets.SUPABASE_KEY }}
+          TARGET_REPO_URL: ${{ inputs.target_repo_url }}
         run: |
-          # Create simple python script to append JSON
-          cat <<EOF > update_history.py
-          import json
-          from datetime import datetime
-          import os
-
-          try:
-              if os.path.exists('scan_history.json'):
-                  with open('scan_history.json', 'r') as f:
-                      history = json.load(f)
-              else:
-                  history = []
-              
-              new_results = []
-              if os.path.exists('results.json'):
-                  with open('results.json', 'r') as f:
-                      try:
-                          content = f.read().strip()
-                          if content:
-                              new_results = json.loads(content)
-                      except json.JSONDecodeError:
-                          pass
-              
-              entry = {
-                  "timestamp": datetime.now().isoformat(),
-                  "repo": "${{ inputs.target_repo_url }}",
-                  "results": new_results
-              }
-              
-              history.append(entry)
-              
-              with open('scan_history.json', 'w') as f:
-                  json.dump(history, f, indent=2)
-          except Exception as e:
-              print(f"Error updating history: {e}")
-          EOF
-          
-          python update_history.py
-
-      - name: Commit History
-        if: always()
-        run: |
-          git config --global user.name 'SentinelKey Bot'
-          git config --global user.email 'bot@sentinelkey'
-          git add scan_history.json
-          git commit -m "Auto: Update scan history" || exit 0
-          git push
+          pip install supabase
+          python save_to_supabase.py

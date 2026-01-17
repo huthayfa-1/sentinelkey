@@ -3,6 +3,7 @@ import pandas as pd
 import json
 import plotly.express as px
 from datetime import datetime
+from supabase import create_client, Client
 
 # Page Config
 st.set_page_config(
@@ -17,19 +18,40 @@ st.title("🛡️ SentinelKey Security Dashboard")
 st.markdown("### Real-time Monitoring & Secret Exposure Analysis")
 st.markdown("---")
 
+# Initialize connection
+@st.cache_resource
+def init_connection():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
+
+supabase = init_connection()
+
 # Load Data
-@st.cache_data
+@st.cache_data(ttl=10)
 def load_data():
     try:
-        with open('scan_history.json', 'r') as f:
-            data = json.load(f)
-        return data
-    except FileNotFoundError:
-        return []
-    except json.JSONDecodeError:
+        response = supabase.table("scan_history").select("*").order("timestamp", desc=True).execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Error connecting to database: {e}")
         return []
 
 data = load_data()
+
+# Sidebar
+with st.sidebar:
+    st.header("Controls")
+    if st.button("🔄 Refresh Data"):
+        st.cache_data.clear()
+        st.rerun()
+
+    st.header("Debug Info")
+    if st.checkbox("Show Raw JSON History"):
+        st.json(data)
+    
+    st.markdown("---")
+    st.markdown("Built with SentinelKey 🛡️")
 
 if not data:
     st.info("No scan history found yet. Run a scan to populate data!")
@@ -42,7 +64,7 @@ else:
         
         # Determine if it's Gitleaks format or TruffleHog (legacy fallback)
         results = scan.get('results', [])
-        # If results is a string (primitive fallback), try to parse or ignore
+        # If results is a string/jsonb, it might come correctly parsed or needs loading
         if isinstance(results, str):
             try:
                 results = json.loads(results)
@@ -64,19 +86,6 @@ else:
                         "Commit": item.get('Commit', 'Unknown')
                     }
                     all_findings.append(finding)
-                # TruffleHog format validation (if we switch back)
-                elif 'DetectorName' in item:
-                     finding = {
-                        "Time": scan_time,
-                        "Repository": repo,
-                        "Type": item.get('DetectorName'),
-                        "File": item.get('SourceMetadata', {}).get('Data', {}).get('Git', {}).get('file'),
-                        "Line": item.get('SourceMetadata', {}).get('Data', {}).get('Git', {}).get('line'),
-                        "Secret": item.get('Raw'),
-                        "Author": "Unknown",
-                        "Commit": item.get('SourceMetadata', {}).get('Data', {}).get('Git', {}).get('commit')
-                    }
-                     all_findings.append(finding)
 
     if not all_findings:
         st.success("🎉 No secrets found in recorded history!")
@@ -117,12 +126,3 @@ else:
             },
             use_container_width=True
         )
-
-# Sidebar with raw data
-with st.sidebar:
-    st.header("Debug Info")
-    if st.checkbox("Show Raw JSON History"):
-        st.json(data)
-    
-    st.markdown("---")
-    st.markdown("Built with SentinelKey 🛡️")
