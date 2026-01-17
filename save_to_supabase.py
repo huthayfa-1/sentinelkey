@@ -2,6 +2,10 @@ import os
 import json
 from datetime import datetime
 from supabase import create_client, Client
+from dotenv import load_dotenv
+
+# Load env vars for local testing
+load_dotenv()
 
 def save_to_supabase():
     url = os.environ.get("SUPABASE_URL")
