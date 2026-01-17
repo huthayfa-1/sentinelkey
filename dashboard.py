@@ -21,15 +21,20 @@ st.markdown("---")
 # Initialize connection
 @st.cache_resource
 def init_connection():
-    url = st.secrets["SUPABASE_URL"]
-    key = st.secrets["SUPABASE_KEY"]
-    return create_client(url, key)
+    try:
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+        return create_client(url, key)
+    except Exception as e:
+        return None
 
 supabase = init_connection()
 
 # Load Data
 @st.cache_data(ttl=10)
 def load_data():
+    if not supabase:
+         return []
     try:
         response = supabase.table("scan_history").select("*").order("timestamp", desc=True).execute()
         return response.data
@@ -54,7 +59,10 @@ with st.sidebar:
     st.markdown("Built with SentinelKey 🛡️")
 
 if not data:
-    st.info("No scan history found yet. Run a scan to populate data!")
+    if not supabase:
+        st.error("Supabase not connected. Please set SUPABASE_URL and SUPABASE_KEY in Streamlit secrets.")
+    else:
+        st.info("No scan history found yet. Run a scan via GitHub Actions to populate data!")
 else:
     # Process Data
     all_findings = []
@@ -62,9 +70,7 @@ else:
         scan_time = scan.get('timestamp', 'Unknown')
         repo = scan.get('repo', 'Unknown')
         
-        # Determine if it's Gitleaks format or TruffleHog (legacy fallback)
         results = scan.get('results', [])
-        # If results is a string/jsonb, it might come correctly parsed or needs loading
         if isinstance(results, str):
             try:
                 results = json.loads(results)
