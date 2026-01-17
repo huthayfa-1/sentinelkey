@@ -6,6 +6,9 @@ on:
         description: 'URL of the repository to scan (e.g., https://github.com/user/repo)'
         required: true
 
+permissions:
+  contents: write
+
 jobs:
   scan-external:
     runs-on: ubuntu-latest
