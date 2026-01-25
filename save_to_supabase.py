@@ -2,10 +2,13 @@ import os
 import json
 from datetime import datetime, timezone
 from supabase import create_client, Client
-from dotenv import load_dotenv
 
-# Load env vars for local testing
-load_dotenv()
+# Load env vars for local testing (optional - not needed in CI)
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass  # dotenv not installed, assume env vars are set directly
 
 def save_to_supabase():
     print("=" * 50)
