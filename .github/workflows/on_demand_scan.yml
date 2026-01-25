@@ -30,8 +30,15 @@ jobs:
         id: gitleaks
         run: |
           cd target_code
-          gitleaks detect --source . --report-format json --report-path ../results.json --no-git || echo "SECRETS_FOUND=true" >> $GITHUB_ENV # pragma: allowlist secret
-          cat ../results.json || echo "[]"
+          # Always create results.json (even if empty)
+          gitleaks detect --source . --report-format json --report-path ../results.json --no-git || true
+          echo "--- Gitleaks scan complete ---"
+          echo "results.json contents:"
+          cat ../results.json 2>/dev/null || echo "[]" > ../results.json
+          # Check if secrets were found
+          if [ -s ../results.json ] && [ "$(cat ../results.json)" != "[]" ]; then
+            echo "SECRETS_FOUND=true" >> $GITHUB_ENV # pragma: allowlist secret
+          fi
       
       - name: Alert on Secrets Found
         if: env.SECRETS_FOUND == 'true'
