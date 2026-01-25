@@ -34,9 +34,10 @@ if analyze_btn:
         try:
             # Use secrets for PAT and Repo info
             pat = st.secrets.get("GITHUB_PAT")
-            owner = "HamDQan1"  # Hardcoded or from secrets
-            repo_name = "sentinelkey" # Hardcoded or from secrets
-            workflow_id = "on_demand_scan.yml"
+            owner = st.secrets.get("GITHUB_OWNER", "HamDQan1") 
+            repo_name = st.secrets.get("GITHUB_REPO", "sentinelkey")
+            workflow_file = "on_demand_scan.yml"
+            ref = "master"
             
             if not pat:
                 st.error("GITHUB_PAT missing in secrets!")
@@ -46,18 +47,23 @@ if analyze_btn:
                     "Accept": "application/vnd.github.v3+json"
                 }
                 data = {
-                    "ref": "master",
+                    "ref": ref,
                     "inputs": {
                         "target_repo_url": target_repo
                     }
                 }
-                api_url = f"https://api.github.com/repos/{owner}/{repo_name}/actions/workflows/{workflow_id}/dispatches"
+                api_url = f"https://api.github.com/repos/{owner}/{repo_name}/actions/workflows/{workflow_file}/dispatches"
                 
                 response = requests.post(api_url, json=data, headers=headers)
                 if response.status_code == 204:
                     st.success("✅ Scan triggered! Results will appear here shortly.")
                 else:
-                    st.error(f"Failed to trigger: {response.status_code} - {response.text}")
+                    st.error(f"Failed to trigger: {response.status_code}")
+                    st.json(response.json())
+                    with st.expander("Debug Info"):
+                        st.write(f"URL: {api_url}")
+                        st.write(f"Ref: {ref}")
+                        st.write("Check if your PAT has 'workflow' scope and if the repo/workflow names are correct.")
         except Exception as e:
             st.error(f"Error triggering scan: {e}")
 
