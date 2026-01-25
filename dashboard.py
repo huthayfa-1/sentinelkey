@@ -5,6 +5,7 @@ import plotly.express as px
 from datetime import datetime
 from supabase import create_client, Client
 import requests
+import time
 
 # Page Config
 st.set_page_config(
@@ -54,9 +55,47 @@ if analyze_btn:
                 }
                 api_url = f"https://api.github.com/repos/{owner}/{repo_name}/actions/workflows/{workflow_file}/dispatches"
                 
+                # Capture current latest timestamp to know when new data arrives
+                latest_ts = None
+                if data:
+                    try:
+                       latest_ts = data[0].get('timestamp')
+                    except:
+                       pass
+
                 response = requests.post(api_url, json=data, headers=headers)
                 if response.status_code == 204:
-                    st.success("✅ Scan triggered! Results will appear here shortly.")
+                    st.success("✅ Scan triggered! Waiting for results...")
+                    
+                    # Poll for up to 60 seconds
+                    progress_text = "Scanning in progress. Please wait..."
+                    my_bar = st.progress(0, text=progress_text)
+                    
+                    found_new = False
+                    for i in range(20):
+                        time.sleep(3)
+                        my_bar.progress((i + 1) * 5, text=f"{progress_text} ({i*3}s)")
+                        
+                        # Check DB for new records
+                        try:
+                            check_resp = supabase.table("scan_history").select("timestamp").order("timestamp", desc=True).limit(1).execute()
+                            if check_resp.data:
+                                current_ts = check_resp.data[0].get('timestamp')
+                                if current_ts != latest_ts:
+                                    found_new = True
+                                    break
+                        except:
+                            pass
+                    
+                    my_bar.empty()
+                    if found_new:
+                        st.success("🚀 New scan results found!")
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.warning("Scan triggered, but results are taking longer than expected. Please refresh manually in a moment.")
+
                 else:
                     st.error(f"Failed to trigger: {response.status_code}")
                     st.json(response.json())
