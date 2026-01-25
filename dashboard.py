@@ -67,21 +67,23 @@ if analyze_btn:
                 if response.status_code == 204:
                     st.success("✅ Scan triggered! Waiting for results...")
                     
-                    # Poll for up to 60 seconds
-                    progress_text = "Scanning in progress. Please wait..."
+                    # Poll for up to 100 seconds 
+                    progress_text = "Scanning in progress... (this may take a minute)"
                     my_bar = st.progress(0, text=progress_text)
                     
                     found_new = False
+                    # 20 checks * 5 seconds = 100 seconds max
                     for i in range(20):
-                        time.sleep(3)
-                        my_bar.progress((i + 1) * 5, text=f"{progress_text} ({i*3}s)")
+                        time.sleep(5)
+                        my_bar.progress((i + 1) * 5, text=f"{progress_text} ({i*5}s)")
                         
                         # Check DB for new records
                         try:
                             check_resp = supabase.table("scan_history").select("timestamp").order("timestamp", desc=True).limit(1).execute()
                             if check_resp.data:
                                 current_ts = check_resp.data[0].get('timestamp')
-                                if current_ts != latest_ts:
+                                # Simple string comparison for ISO timestamps
+                                if latest_ts is None or current_ts > latest_ts:
                                     found_new = True
                                     break
                         except:
@@ -89,12 +91,13 @@ if analyze_btn:
                     
                     my_bar.empty()
                     if found_new:
-                        st.success("🚀 New scan results found!")
+                        st.balloons()
+                        st.success("🚀 New scan results found! Refreshing...")
                         st.cache_data.clear()
-                        time.sleep(1)
+                        time.sleep(2)
                         st.rerun()
                     else:
-                        st.warning("Scan triggered, but results are taking longer than expected. Please refresh manually in a moment.")
+                        st.warning("Scan is taking longer than expected (could be queued). Check back in a minute.")
 
                 else:
                     st.error(f"Failed to trigger: {response.status_code}")
@@ -155,6 +158,19 @@ if not data:
     else:
         st.info("No scan history found yet. Enter a repo URL above to start!")
 else:
+    # Check latest scan for feedback
+    latest_scan = data[0]
+    ls_results = latest_scan.get('results', [])
+    if isinstance(ls_results, str):
+        try: 
+            ls_results = json.loads(ls_results)
+        except: 
+            ls_results = []
+    
+    # If the latest scan was clean (no results)
+    if not ls_results:
+        st.success(f"✅ **Latest Scan**: Clean! No secrets found in {latest_scan.get('repo', 'repository')}.")
+    
     # Process Data
     all_findings = []
     for scan in data:
