@@ -4,6 +4,7 @@ import json
 import plotly.express as px
 from datetime import datetime
 from supabase import create_client, Client
+import requests
 
 # Page Config
 st.set_page_config(
@@ -16,6 +17,50 @@ st.set_page_config(
 # Title and Header
 st.title("🛡️ SentinelKey Security Dashboard")
 st.markdown("### Real-time Monitoring & Secret Exposure Analysis")
+st.markdown("---")
+
+# Main UI Action Trigger
+col_input, col_btn = st.columns([5, 1])
+with col_input:
+    target_repo = st.text_input("Target Repository URL", placeholder="https://github.com/user/repo", label_visibility="collapsed")
+
+with col_btn:
+    analyze_btn = st.button("Analyze", type="primary", use_container_width=True)
+
+if analyze_btn:
+    if not target_repo:
+        st.warning("Please enter a URL first.")
+    else:
+        try:
+            # Use secrets for PAT and Repo info
+            pat = st.secrets.get("GITHUB_PAT")
+            owner = "HamDQan1"  # Hardcoded or from secrets
+            repo_name = "sentinelkey" # Hardcoded or from secrets
+            workflow_id = "on_demand_scan.yml"
+            
+            if not pat:
+                st.error("GITHUB_PAT missing in secrets!")
+            else:
+                headers = {
+                    "Authorization": f"Bearer {pat}",
+                    "Accept": "application/vnd.github.v3+json"
+                }
+                data = {
+                    "ref": "master",
+                    "inputs": {
+                        "target_repo_url": target_repo
+                    }
+                }
+                api_url = f"https://api.github.com/repos/{owner}/{repo_name}/actions/workflows/{workflow_id}/dispatches"
+                
+                response = requests.post(api_url, json=data, headers=headers)
+                if response.status_code == 204:
+                    st.success("✅ Scan triggered! Results will appear here shortly.")
+                else:
+                    st.error(f"Failed to trigger: {response.status_code} - {response.text}")
+        except Exception as e:
+            st.error(f"Error triggering scan: {e}")
+
 st.markdown("---")
 
 # Initialize connection
@@ -44,7 +89,7 @@ def load_data():
 
 data = load_data()
 
-# Sidebar
+# Sidebar (Only Controls & Debug)
 with st.sidebar:
     st.header("Controls")
     if st.button("🔄 Refresh Data"):
@@ -58,11 +103,12 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("Built with SentinelKey 🛡️")
 
+# Visualization Logic
 if not data:
     if not supabase:
         st.error("Supabase not connected. Please set SUPABASE_URL and SUPABASE_KEY in Streamlit secrets.")
     else:
-        st.info("No scan history found yet. Run a scan via GitHub Actions to populate data!")
+        st.info("No scan history found yet. Enter a repo URL above to start!")
 else:
     # Process Data
     all_findings = []
