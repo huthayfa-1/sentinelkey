@@ -15,12 +15,42 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# Title and Header
+# ============================================
+# INITIALIZE SUPABASE FIRST (before any usage)
+# ============================================
+@st.cache_resource
+def init_connection():
+    try:
+        url = st.secrets["SUPABASE_URL"]
+        key = st.secrets["SUPABASE_KEY"]
+        return create_client(url, key)
+    except Exception as e:
+        return None
+
+supabase = init_connection()
+
+# Load Data Function
+@st.cache_data(ttl=10)
+def load_data():
+    if not supabase:
+         return []
+    try:
+        response = supabase.table("scan_history").select("*").order("timestamp", desc=True).limit(50).execute()
+        return response.data
+    except Exception as e:
+        st.error(f"Error connecting to database: {e}")
+        return []
+
+# ============================================
+# HEADER
+# ============================================
 st.title("🛡️ SentinelKey Security Dashboard")
 st.markdown("### Real-time Monitoring & Secret Exposure Analysis")
 st.markdown("---")
 
-# Main UI Action Trigger
+# ============================================
+# MAIN UI: TRIGGER SCAN
+# ============================================
 col_input, col_btn = st.columns([5, 1])
 with col_input:
     target_repo = st.text_input("Target Repository URL", placeholder="https://github.com/user/repo", label_visibility="collapsed")
@@ -31,9 +61,15 @@ with col_btn:
 if analyze_btn:
     if not target_repo:
         st.warning("Please enter a URL first.")
+    elif not supabase:
+        st.error("Supabase not connected. Cannot poll for results.")
     else:
         try:
-            # Use secrets for PAT and Repo info
+            # Get current latest timestamp BEFORE triggering
+            current_data = load_data()
+            latest_ts = current_data[0].get('timestamp') if current_data else None
+            
+            # GitHub API config
             pat = st.secrets.get("GITHUB_PAT")
             owner = st.secrets.get("GITHUB_OWNER", "HamDQan1") 
             repo_name = st.secrets.get("GITHUB_REPO", "sentinelkey")
@@ -47,7 +83,7 @@ if analyze_btn:
                     "Authorization": f"Bearer {pat}",
                     "Accept": "application/vnd.github.v3+json"
                 }
-                data = {
+                payload = {  # Fixed: renamed from 'data' to 'payload'
                     "ref": ref,
                     "inputs": {
                         "target_repo_url": target_repo
@@ -55,53 +91,64 @@ if analyze_btn:
                 }
                 api_url = f"https://api.github.com/repos/{owner}/{repo_name}/actions/workflows/{workflow_file}/dispatches"
                 
-                # Capture current latest timestamp to know when new data arrives
-                latest_ts = None
-                if data:
-                    try:
-                       latest_ts = data[0].get('timestamp')
-                    except:
-                       pass
-
-                response = requests.post(api_url, json=data, headers=headers)
+                response = requests.post(api_url, json=payload, headers=headers)
                 if response.status_code == 204:
                     st.success("✅ Scan triggered! Waiting for results...")
                     
-                    # Poll for up to 100 seconds 
+                    # Poll for up to 120 seconds
                     progress_text = "Scanning in progress... (this may take a minute)"
                     my_bar = st.progress(0, text=progress_text)
                     
                     found_new = False
-                    # 20 checks * 5 seconds = 100 seconds max
-                    for i in range(20):
+                    new_scan_result = None
+                    # 24 checks * 5 seconds = 120 seconds max
+                    for i in range(24):
                         time.sleep(5)
-                        my_bar.progress((i + 1) * 5, text=f"{progress_text} ({i*5}s)")
+                        my_bar.progress(min((i + 1) * 4, 100), text=f"{progress_text} ({(i+1)*5}s)")
                         
-                        # Check DB for new records
+                        # Check DB for new records (bypass cache)
                         try:
-                            check_resp = supabase.table("scan_history").select("timestamp").order("timestamp", desc=True).limit(1).execute()
+                            check_resp = supabase.table("scan_history").select("*").order("timestamp", desc=True).limit(1).execute()
                             if check_resp.data:
-                                current_ts = check_resp.data[0].get('timestamp')
-                                # Simple string comparison for ISO timestamps
-                                if latest_ts is None or current_ts > latest_ts:
+                                new_record = check_resp.data[0]
+                                new_ts = new_record.get('timestamp')
+                                # Compare timestamps
+                                if latest_ts is None or (new_ts and new_ts > latest_ts):
                                     found_new = True
+                                    new_scan_result = new_record
                                     break
-                        except:
+                        except Exception as poll_err:
                             pass
                     
                     my_bar.empty()
-                    if found_new:
+                    
+                    if found_new and new_scan_result:
                         st.balloons()
-                        st.success("🚀 New scan results found! Refreshing...")
+                        # Check if scan found anything
+                        results = new_scan_result.get('results', [])
+                        if isinstance(results, str):
+                            try:
+                                results = json.loads(results)
+                            except:
+                                results = []
+                        
+                        if results:
+                            st.error(f"🚨 **Alert!** Found {len(results)} exposed secret(s)!")
+                        else:
+                            st.success(f"✅ **Scan Complete**: No secrets found in `{target_repo}`")
+                        
                         st.cache_data.clear()
                         time.sleep(2)
                         st.rerun()
                     else:
-                        st.warning("Scan is taking longer than expected (could be queued). Check back in a minute.")
+                        st.warning("Scan is taking longer than expected. The workflow may be queued. Click 'Refresh Data' in a minute.")
 
                 else:
                     st.error(f"Failed to trigger: {response.status_code}")
-                    st.json(response.json())
+                    try:
+                        st.json(response.json())
+                    except:
+                        st.write(response.text)
                     with st.expander("Debug Info"):
                         st.write(f"URL: {api_url}")
                         st.write(f"Ref: {ref}")
@@ -111,33 +158,11 @@ if analyze_btn:
 
 st.markdown("---")
 
-# Initialize connection
-@st.cache_resource
-def init_connection():
-    try:
-        url = st.secrets["SUPABASE_URL"]
-        key = st.secrets["SUPABASE_KEY"]
-        return create_client(url, key)
-    except Exception as e:
-        return None
-
-supabase = init_connection()
-
-# Load Data
-@st.cache_data(ttl=10)
-def load_data():
-    if not supabase:
-         return []
-    try:
-        response = supabase.table("scan_history").select("*").order("timestamp", desc=True).execute()
-        return response.data
-    except Exception as e:
-        st.error(f"Error connecting to database: {e}")
-        return []
-
+# ============================================
+# SIDEBAR
+# ============================================
 data = load_data()
 
-# Sidebar (Only Controls & Debug)
 with st.sidebar:
     st.header("Controls")
     if st.button("🔄 Refresh Data"):
@@ -151,7 +176,9 @@ with st.sidebar:
     st.markdown("---")
     st.markdown("Built with SentinelKey 🛡️")
 
-# Visualization Logic
+# ============================================
+# VISUALIZATION
+# ============================================
 if not data:
     if not supabase:
         st.error("Supabase not connected. Please set SUPABASE_URL and SUPABASE_KEY in Streamlit secrets.")
@@ -167,11 +194,11 @@ else:
         except: 
             ls_results = []
     
-    # If the latest scan was clean (no results)
+    # Show latest scan status
     if not ls_results:
-        st.success(f"✅ **Latest Scan**: Clean! No secrets found in {latest_scan.get('repo', 'repository')}.")
+        st.success(f"✅ **Latest Scan**: Clean! No secrets found in `{latest_scan.get('repo', 'repository')}`")
     
-    # Process Data
+    # Process ALL Data
     all_findings = []
     for scan in data:
         scan_time = scan.get('timestamp', 'Unknown')
@@ -186,7 +213,6 @@ else:
                 
         if isinstance(results, list):
             for item in results:
-                # Gitleaks format
                 if 'RuleID' in item:
                     finding = {
                         "Time": scan_time,
@@ -216,7 +242,6 @@ else:
         
         with col_left:
             st.subheader("Leaks Over Time")
-            # Convert time to date for grouping
             df['Date'] = pd.to_datetime(df['Time']).dt.date
             daily_counts = df.groupby('Date').size().reset_index(name='Counts')
             fig_line = px.line(daily_counts, x='Date', y='Counts', markers=True)
